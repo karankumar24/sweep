@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/skills/sweep/sweep.py\" --remind --opt-in",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

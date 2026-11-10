@@ -1,0 +1,20 @@
+{
+  "name": "sweep",
+  "version": "1.0.0",
+  "description": "Finds orphaned dev servers, headless browsers, merged worktrees, old session scratch and old transcripts left by Claude Code and Codex. Kills only proven orphans and asks about everything else. macOS only.",
+  "author": {
+    "name": "Karan Kumar",
+    "url": "https://github.com/karankumar24"
+  },
+  "homepage": "https://github.com/karankumar24/sweep",
+  "repository": "https://github.com/karankumar24/sweep",
+  "license": "MIT",
+  "keywords": ["cleanup", "disk-space", "dev-servers", "worktrees", "processes", "claude-code"],
+  "userConfig": {
+    "remind": {
+      "type": "boolean",
+      "title": "Startup reminder",
+      "description": "At session start, show a one-line note from sweep's last scan and refresh that scan in the background. Off unless you turn it on."
+    }
+  }
+}

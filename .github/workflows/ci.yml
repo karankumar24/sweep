@@ -1,0 +1,39 @@
+# Runs sweep's tests on macOS (the only platform it supports): with the Mac's own /usr/bin/python3 (3.9, what most
+# people run it with) and with a current Python. Actions are pinned to commits so a moved tag can't change what runs.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['system', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.python != 'system'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tests
+        run: |
+          PY=$([ "${{ matrix.python }}" = system ] && echo /usr/bin/python3 || echo python)
+          "$PY" --version
+          "$PY" -I skills/sweep/sweep.py --selftest
+      - name: Manifests parse
+        run: python3 -c "import json; [json.load(open(p)) for p in ('.claude-plugin/marketplace.json', '.claude-plugin/plugin.json', 'hooks/hooks.json')]"

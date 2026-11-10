@@ -1,0 +1,24 @@
+{
+  "name": "sweep",
+  "description": "Clean up what Claude Code and Codex leave behind on your Mac, and remove only what is proven unneeded.",
+  "owner": {
+    "name": "Karan Kumar",
+    "url": "https://github.com/karankumar24"
+  },
+  "plugins": [
+    {
+      "name": "sweep",
+      "description": "Finds orphaned dev servers, headless browsers, merged worktrees, old session scratch and old transcripts left by Claude Code and Codex. Kills only proven orphans and asks about everything else. macOS only.",
+      "source": "./",
+      "category": "productivity",
+      "homepage": "https://github.com/karankumar24/sweep",
+      "repository": "https://github.com/karankumar24/sweep",
+      "license": "MIT",
+      "author": {
+        "name": "Karan Kumar",
+        "url": "https://github.com/karankumar24"
+      },
+      "keywords": ["cleanup", "disk-space", "dev-servers", "worktrees", "processes", "claude-code"]
+    }
+  ]
+}
