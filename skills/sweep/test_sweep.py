@@ -114,6 +114,15 @@ class Ownership(unittest.TestCase):
         self.assertFalse(own("/bin/zsh -c source /Users/me/.claude/shell-snapshots/s.sh && claude --version"))
         self.assertFalse(own("node /x/vite.js --config /y/claude --x"))
 
+    def test_child_in_live_session_folder_is_not_orphaned(self):
+        table = sweep.parse_ps("999400 1 999400 2-00:00:00 0 1 me node /x/node_modules/.bin/vite\n"
+                               "999401 999400 999400 2-00:00:00 0 1 me node worker.js\n")
+        args = dict(owners={999400: 999999}, known=True, sessions={"s": "/work/app"})
+        root_only = sweep.assess(999400, table, [999400, 999401], [], {}, member_cwds=["/tmp", "/tmp"], **args)
+        self.assertEqual(root_only["verdict"], "orphaned")
+        child_inside = sweep.assess(999400, table, [999400, 999401], [], {}, member_cwds=["/tmp", "/work/app/src"], **args)
+        self.assertEqual(child_inside["verdict"], "ask")
+
     def test_orphan_verdict(self):
         V = sweep.orphan_verdict
         self.assertEqual(V(None, False, 42, False, [], None)[0], "orphaned")  # owner session exited, nothing else
@@ -148,7 +157,9 @@ class KeptAndYoung(unittest.TestCase):
         self.assertIn("Claude Code session pid 998100", got[998102]["owner"])
         self.assertIn("preview server", got[998202]["owner"])
         self.assertIn("terminal shell pid 998300", got[998301]["owner"])
-        self.assertTrue(all(k["status"] == "kept (live owner)" for k in got.values()))
+        self.assertEqual(got[998102]["status"], "kept (live owner)")
+        self.assertEqual(got[998202]["status"], "kept (live owner)")
+        self.assertEqual(got[998301]["status"], "kept (parent running)")  # a terminal is not a Claude owner
 
     def test_young_orphan_is_listed_as_ask(self):
         real = sweep.owner_map

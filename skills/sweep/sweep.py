@@ -230,7 +230,8 @@ def assess(pid, table, members=(), listening=(), conns=None, keep=None, keep_por
     owner_alive = owner in table and bool(CLAUDE_OWNER.search(table[owner]["command"]))
     members = set(members) or {pid}
     clients = sorted({c for port in listening for c in (conns or {}).get(port, ()) if c not in members})
-    session_cwd = next((s for s in (sessions or {}).values() if s and cwd and (inside(cwd, s) or inside(s, cwd))), None)
+    session_cwd = next((s for s in (sessions or {}).values() for c in (cwd, *member_cwds)  # any member, not just the root
+                        if s and c and (inside(c, s) or inside(s, c))), None)
     kept_path = next((k for k in keep_paths for c in member_cwds if c and inside(c, k)), None)
     kept = ("declared in a keep file or --keep" if members & keep or set(listening) & set(map(str, keep_ports))
             else f"cwd inside kept path {kept_path}" if kept_path else "")
@@ -329,9 +330,11 @@ def kept_servers(table, trees, cwds, listen=None):
         members = descendants(pid, table)
         seen.update(members)
         listening = ports(members, listen)
+        owner = owner_desc(pid, table)
         out.append(dict(pid=pid, pids=members, label=label(p["command"], listening), command=p["command"][:160], ports=listening,
-                        age_hours=round(p["age"] / 3600, 1), cwd=cwds.get(pid), owner=owner_desc(pid, table),
-                        rss_mb=round(sum(table[n]["rss_kb"] for n in members) / 1024, 1), status="kept (live owner)"))
+                        age_hours=round(p["age"] / 3600, 1), cwd=cwds.get(pid), owner=owner,
+                        rss_mb=round(sum(table[n]["rss_kb"] for n in members) / 1024, 1),
+                        status="kept (live owner)" if owner.startswith("Claude") else "kept (parent running)"))
     return out
 def explain(pid, table, cwds, sessions, keep):
     members = descendants(pid, table)
@@ -677,12 +680,14 @@ def bulk_verdict(path, age_hours, keep_paths, busy_cwds, mentioned, tracked, rec
     if mentioned:
         reasons.append("named in a live session's transcript")
     return ("keep" if reasons else "candidate"), reasons
-def live_transcripts(live, self_id, hours=24):
-    cutoff, files = time.time() - hours * 3600, []
+def live_transcripts(live, self_id):
+    """Transcripts of every other live session, however long it has been idle. This session's is skipped: it holds
+    sweep's own earlier output, which names every candidate."""
+    files = []
     for sid in live:
         if sid != self_id:
             files += glob.glob(str(PROJECTS / f"*/{sid}.jsonl")) + glob.glob(str(PROJECTS / f"*/{sid}/subagents/*.jsonl"))
-    return [f for f in files if os.path.getmtime(f) > cutoff]
+    return files
 def worktree_bulk(checkouts, keep_paths, cwds, live, self_id, min_mb, recent_hours, cwds_ok=True):
     """Big gitignored, untracked folders inside checkouts (e.g. shots/tmp/*). Listed only; never deleted here."""
     units = []
@@ -1025,7 +1030,7 @@ def main():
     doomed = [t for t in trees if t["status"] in (("killed",) if args.apply else ("would kill",))]
     summary = (f"{'killed' if args.apply else 'would kill'} {len(doomed)} proven orphan trees "
                f"({sum(t['rss_mb'] for t in doomed):.1f} MB RSS), {sum(t['status'] == 'ask owner' for t in trees)} trees to ask about, "
-               f"{sum(k['status'] == 'kept (live owner)' for k in kept)} dev servers kept by live owners, "
+               f"{len(kept)} dev servers kept because their parent is running, "
                f"{len(brokers)} stale state files, "
                f"{sum(j['verdict'] in ('hung', 'stale') for j in jobs)} hung Codex jobs"
                f"{f' ({n} records cleared)' if (n := sum(j['verdict'] == 'cleared' for j in jobs)) else ''}, "
@@ -1053,7 +1058,7 @@ def main():
     for t in trees:
         print(f"  {t['status']}: {t['label']} pid {t['pid']} ({len(t['pids'])} procs, {t['rss_mb']} MB RSS, {t['cpu']}% CPU, {t['age_hours']}h) cwd={t['cwd'] or '?'}\n"
               f"    command: {t['command']}\n    chain: {' <- '.join(t['chain'])}\n    evidence: {'; '.join(t['evidence'])}")
-    print("Dev servers kept by live owners (stop one only on the owner's yes: --apply --kill <pid>):")
+    print("Dev servers kept because their parent is running (stop one only on the owner's yes: --apply --kill <pid>):")
     for k in kept:
         print(f"  {k['status']}: {k['label']} pid {k['pid']} ({len(k['pids'])} procs, {k['rss_mb']} MB RSS, {k['age_hours']}h)"
               f" cwd={k['cwd'] or '?'}\n    owner: {k['owner']}\n    command: {k['command']}")
@@ -1065,7 +1070,8 @@ def main():
         print(f"  {j['verdict']}: {j['id']} idle {j['idle_min']} min{'; turn completed' if j['turn_completed'] else ''}"
               f"{'; no Claude session recorded' if not j['claude_session'] else ''}"
               f" [{os.path.basename(j['workspace'] or '?')}] {j['summary']}")
-    print(f"Worktrees (scope: {len(found)} git repos in ~/dev, ~/Desktop, ~/Downloads to depth 3 or holding a live session's cwd;"
+    bases = ", ".join(str(b).replace(str(HOME), "~", 1) for b in SCAN_BASES if b.is_dir()) or "no scan folders found"
+    print(f"Worktrees (scope: {len(found)} git repos in {bases} to depth 3 or holding a live session's cwd;"
           " each repo's `git worktree list`):")
     for w in wts:
         print(f"  {w['verdict']}: {w['path']} [{w['branch']}; idle {w['idle_days']}d; commit {w['commit_days']}d]" +

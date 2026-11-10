@@ -1,6 +1,6 @@
 {
   "name": "sweep",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Finds orphaned dev servers, headless browsers, merged worktrees, old session scratch and old transcripts left by Claude Code and Codex. Kills only proven orphans and asks about everything else. macOS only.",
   "author": {
     "name": "Karan Kumar",
