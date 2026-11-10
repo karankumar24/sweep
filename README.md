@@ -45,7 +45,7 @@ Then it asks you about each one.
 
 ## Install
 
-Needs macOS and Python 3.9 or newer. Paste this in your terminal:
+Needs macOS and Python 3.9 or newer. Cleaning up files needs macOS 15 or newer; on older versions sweep still stops orphaned processes and removes merged worktrees. Paste this in your terminal:
 
 ```bash
 DIR=$(mktemp -d)

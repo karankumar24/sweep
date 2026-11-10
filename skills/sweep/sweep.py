@@ -17,11 +17,12 @@ import sys
 import tarfile
 import time
 HOME = Path.home()
-STATE = HOME / ".claude/sweep"  # outside the install folder, which a plugin update replaces
+CLAUDE = Path(os.environ.get("CLAUDE_CONFIG_DIR") or HOME / ".claude").expanduser()  # Claude Code's config dir
+STATE = CLAUDE / "sweep"  # outside the install folder, which a plugin update replaces
 CACHE = STATE / "last.json"
 KEEP_DIR = STATE / "keep"  # sessions declare needs here: lines "path /abs", "port 5266", "pid 123"
-BROKER_ROOT = HOME / ".claude/plugins/data/codex-openai-codex/state"
-PROJECTS = HOME / ".claude/projects"
+BROKER_ROOT = CLAUDE / "plugins/data/codex-openai-codex/state"
+PROJECTS = CLAUDE / "projects"
 CODEX_SESSIONS = HOME / ".codex/sessions"
 APP = HOME / "Library/Application Support/Claude"
 ARCHIVE_DIR = HOME / "Archives/claude-chats"
@@ -35,7 +36,7 @@ PS = ("ps", "-axwwo", "pid=,ppid=,pgid=,etime=,%cpu=,rss=,user=,lstart=,command=
 LSTART = re.compile(r"(\S+ \S+ +\d{1,2} \d\d:\d\d:\d\d \d{4}) +(.*)")  # ps lstart, e.g. "Thu Oct 29 16:14:18 2026"
 # Local counterpart of the app's Storage panel (get_storage_usage). The Cowork VM (vm_bundles, claude-code-vm) is never scanned.
 STORAGE = (("conversation history", [PROJECTS]),
-           ("other Claude Code history", [HOME / ".claude" / n for n in ("file-history", "shell-snapshots", "paste-cache", "session-env",
+           ("other Claude Code history", [CLAUDE / n for n in ("file-history", "shell-snapshots", "paste-cache", "session-env",
                                                                   "todos", "debug", "telemetry", "history.jsonl", "backups")]),
            ("Codex sessions", [CODEX_SESSIONS]),
            ("Codex logs and DBs", [HOME / ".codex/log", *map(Path, glob.glob(str(HOME / ".codex/logs_*.sqlite*")))]),
@@ -52,7 +53,7 @@ AGENT = re.compile(r"app-server-broker\.mjs\s+serve\b|(?:\bcodex\s+app-server\b)
 DEV = re.compile(r"(?:\b(?:npm|pnpm|yarn|bun|npx)(?:\s+exec)?\s+(?:run\s+)?(?:dev|start|preview|vite)\b|\b(?:vite|next)\s+(?:dev|start|preview)\b|node_modules/\.bin/vite\b|\besbuild\b.*--service\b|\btsc\s+--watch\b|\bvitest\b|\bturbo\b|\bpython(?:3(?:\.\d+)?)?\s+-m\s+http\.server\b|\bplaywright\b|chrome-headless-shell\b|Google Chrome for Testing\b)")
 # A live owner, matched on the executable (never on arguments): the Claude app or a Claude Code CLI.
 CLAUDE_OWNER = re.compile(r"^(?:/Applications/Claude\.app/|/(?:[^ ]| (?!-))*?/MacOS/claude(?:\s|$)|(?:\S*/)?claude(?:\s|$))")
-SNAPSHOT_SHELL = "/.claude/shell-snapshots/"  # the shell a Claude Code Bash call runs in
+SNAPSHOT_SHELL = "/shell-snapshots/"  # the shell a Claude Code Bash call runs in
 BLENDER_BG = re.compile(r"/[Bb]lender(?:\.app/Contents/MacOS/[Bb]lender)?\s(?:.*\s)?(?:-b|--background)(?:\s|$)")
 
 def run(*args):
@@ -493,8 +494,11 @@ def worktrees(found, days, sizes, apply, remove, cwds, sessions=None, cwds_ok=Tr
         if apply and remove and folder.is_dir():  # only where sweep always pruned; other repos' prunable records are listed only
             run("git", "-C", str(repo), "worktree", "prune")
     return entries, extras
+def claude_dir():
+    """Claude Code's config dir, resolved at call time (tests point HOME elsewhere)."""
+    return Path(os.environ["CLAUDE_CONFIG_DIR"]).expanduser() if os.environ.get("CLAUDE_CONFIG_DIR") else HOME / ".claude"
 def settings():
-    path = HOME / ".claude/settings.json"
+    path = claude_dir() / "settings.json"
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -503,11 +507,11 @@ def settings():
             "cleanupPeriodDays", "desktopSessionCleanupPeriodDays")
     values = {key: data.get(key) for key in keys}
     values["env.BASH_MAX_OUTPUT_LENGTH"] = data.get("env", {}).get("BASH_MAX_OUTPUT_LENGTH")
-    advice = []  # user keeps auto-compact off by choice; don't suggest it
+    advice = []
     if not values["bashOutputMaxChars"] and not values["env.BASH_MAX_OUTPUT_LENGTH"]:
-        advice.append("Optional: bashOutputMaxChars ~15000 caps noisy Bash output (default 30000).")
+        advice.append("Optional: bashOutputMaxChars (e.g. 15000) caps noisy Bash output.")
     if not values["desktopSessionCleanupPeriodDays"]:
-        advice.append("Set desktopSessionCleanupPeriodDays ~14; desktop transcripts are otherwise kept forever.")
+        advice.append("Optional: desktopSessionCleanupPeriodDays sets how many days the Claude app keeps its sessions.")
     return dict(values=values, recommendations=advice)
 def gb(n):
     return f"{n / 1e9:.2f} GB"
@@ -572,7 +576,7 @@ def stale_keeps(entries, listening):
 def live_sessions():
     """{sessionId: cwd} of Claude Code sessions whose CLI process is alive."""
     found = {}
-    for f in (HOME / ".claude/sessions").glob("*.json"):
+    for f in (claude_dir() / "sessions").glob("*.json"):
         try:
             d = json.loads(f.read_text())
             if alive(int(d["pid"])):
@@ -971,7 +975,8 @@ def main():
     ap.add_argument("--recent-hours", type=float, default=24, help="bulk changed this recently is kept")
     ap.add_argument("--job-hours", type=float, default=6, help="clear a hung Codex job record after this much silence")
     ap.add_argument("--gentle", action="store_true", help="run at lowest CPU/IO priority")
-    ap.add_argument("--max-load", type=float, default=8, help="skip heavy scans at or above this 1-minute load")
+    ap.add_argument("--max-load", type=float, default=max(8, os.cpu_count() or 8),
+                    help="skip heavy scans at or above this 1-minute load (default: CPU cores, at least 8)")
     ap.add_argument("--wait", type=float, default=30, help="seconds to wait for the load to drop")
     ap.add_argument("--quick", action="store_true", help="skip heavy scans (storage, bulk, transcripts)")
     ap.add_argument("--json", action="store_true")

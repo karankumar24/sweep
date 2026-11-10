@@ -110,8 +110,8 @@ sweep can show one line when a session starts, like `sweep: 2 orphaned process t
 
 ## When your Mac is busy
 
-If the 1-minute load average is 8 or more, sweep waits up to 30 seconds, then skips the slow disk scans and says so. Run it again later, or raise the limit with `--max-load 12`.
+If the 1-minute load average is at or above your Mac's number of CPU cores (at least 8), sweep waits up to 30 seconds, then skips the slow disk scans and says so. Run it again later, or raise the limit with `--max-load 12`.
 
 ## Requirements
 
-macOS with Python 3.9 or newer. sweep uses tools built into macOS (`ps`, `lsof`, `netstat`, and `trash`, which recent versions include). Without `trash`, sweep deletes nothing.
+macOS with Python 3.9 or newer. sweep uses tools built into macOS (`ps`, `lsof`, `netstat`, and `trash`, which ships with macOS 15 and later). Without `trash`, sweep moves no files: the process, job-record and worktree steps still work.
